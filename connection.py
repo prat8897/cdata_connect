@@ -6,7 +6,6 @@ from .log import logger
 class Connection:
     """
     Create a connection to the CData Connect API.
-
     :init param base_url: The base URL of the CData Connect API.
     :init param username: The username for authentication.
     :init param password: The password for authentication.
@@ -31,4 +30,3 @@ class Connection:
     def cursor(self):
         return Cursor(self)
 
-    # Additional connection methods as required
