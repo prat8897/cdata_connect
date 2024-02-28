@@ -2,6 +2,7 @@ from datetime import datetime, date, time
 from decimal import Decimal
 import uuid
 
+
 def convert_to_python_type(value, data_type):
     if data_type in ['Tinyint', 'Smallint', 'Integer', 'Bigint']:
         return int(value)
@@ -26,8 +27,12 @@ def convert_to_python_type(value, data_type):
     else:
         raise ValueError(f"Unsupported data type: {data_type}")
 
+
+"""
 # Example usage
 value = '2024-01-31'
 data_type = 'Date'
 converted_value = convert_to_python_type(value, data_type)
-print(f"Original: {value} ({data_type}), Converted: {converted_value} ({type(converted_value)})")
+print(f"Original: {value} ({data_type}), Converted: {converted_value}"
+       "({type(converted_value)})")
+"""
