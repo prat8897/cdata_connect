@@ -31,8 +31,9 @@ class Cursor:
             error_string = "Cursor - API request failed with status code "\
                            f"{response.status_code}: {response.text}"
             logger.error(error_string)
-            raise Exception(error_string)     
-        self.row_generator = self._row_generator(response.raw)
+            raise Exception(error_string)
+
+        self.row_generator = self._row_generator(response.content)
 
         logger.info(f"Cursor - Received response: {response.text}")
         data = json.loads(response.text)
@@ -78,5 +79,3 @@ class Cursor:
                 break
             many_rows.append(row)
         return many_rows
-
-    
