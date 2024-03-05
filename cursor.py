@@ -16,7 +16,7 @@ class Cursor:
         self.rows = None
         self.current_row = 0
 
-    def execute(self, query: str, params=None):
+    def execute(self, query: str, params: dict = None):
 
         if params is not None and not isinstance(params, dict):
             raise ValueError("Params must be a dictionary")
@@ -39,19 +39,22 @@ class Cursor:
             logger.error(error_string)
             raise Exception(error_string)
 
-        logger.debug(f"Cursor - Received response: {response.text}")
+        logger.info(f"Cursor - Received response: {response.text}")
         data = json.loads(response.text)
         self.schema = data['results'][0]['schema']
         self.rows = data['results'][0]['rows']
+        self.rowcount = data['results'][0]['affectedRows']
         self.current_row = 0
 
         self.row_generator = (row for row in self.rows)
         return self
 
     def _convert_row(self, row):
-        """Convert a single row to the appropriate python types."""
-        return [convert_to_python_type(value, data_type) for value, data_type
-                in zip(row, self.column_types)]
+        converted_row = []
+        for idx, value in enumerate(row):
+            data_type_name = self.schema[idx]['dataTypeName']
+            converted_row.append(convert_to_python_type(value, data_type_name))
+        return converted_row
 
     def fetchone(self):
         if self.current_row < len(self.rows):
