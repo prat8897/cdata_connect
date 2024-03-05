@@ -60,19 +60,16 @@ class Cursor:
         if self.current_row < len(self.rows):
             row = self.rows[self.current_row]
             self.current_row += 1
-            # return self._convert_row(row)
-            return row
+            return self._convert_row(row)
         return None
 
     def fetchall(self):
         remaining_rows = self.rows[self.current_row:]
         self.current_row = len(self.rows)  # Move the cursor to the end
-        # return [self._convert_row(row) for row in remaining_rows]
-        return [row for row in remaining_rows]
+        return [self._convert_row(row) for row in remaining_rows]
 
     def fetchmany(self, size=1):
         end_row = self.current_row + size
         rows = self.rows[self.current_row:end_row]
         self.current_row = end_row
-        # return [self._convert_row(row) for row in rows]
-        return [row for row in rows]
+        return [self._convert_row(row) for row in rows]
