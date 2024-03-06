@@ -23,7 +23,9 @@ class ThreadSafeConnectionHandler:
         return self._thread_local_storage.connection
 
 
+"""
 # Example Usage
 handler = ThreadSafeConnectionHandler()
 connection = handler.get_connection(base_url='https://api.example.com',
                                     username='user', password='pass')
+"""
