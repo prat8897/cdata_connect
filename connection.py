@@ -49,4 +49,4 @@ class Connection:
             self.auth = (username, password)
 
     def cursor(self):
-        return Cursor(self) 
+        return Cursor(self)
