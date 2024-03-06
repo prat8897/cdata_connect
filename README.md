@@ -73,7 +73,7 @@ This library supports multithreading. You can make use of that like so:
 
 ```
 import threading
-from your_package import Connection  # Adjust this import to your package structure
+from cdata_connect import Connection  # Adjust this import to your package structure
 
 def thread_task():
     # Each thread creates its own connection
