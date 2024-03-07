@@ -67,6 +67,38 @@ params = {
 query = "SELECT * FROM users WHERE id = %(id)s AND name = %(name)s"
 cursor.execute(query, params)
 ```
+## Batch Operation
+The batch operation allows you to execute batch INSERTs, UPDATEs, and DELETEs against your data sources using a single request.
+
+To execute a batch operation,
+
+```
+query = "SELECT * FROM users WHERE id = %(id)s AND name = %(name)s"
+schema = "Schema_Name"
+params = [
+    {
+      "@p1": { "dataType": <int>, "value": <any> },
+      "@p2": { "dataType": <int>, "value": <any> },
+      ...
+    },
+    ...
+  ]
+cursor.executemany(query, schema, params)
+```
+## Execute Procedures
+The execute operation allows you to execute stored procedures for any of the data sources configured in your CData Connect account.
+
+```
+procedure = "Stored_Procedure"
+schema = "Schema_Name"
+params = {
+    "@p1": { "dataType": <int>, "direction": <int>, "value": <any> },
+    "@p2": { "dataType": <int>, "direction": <int>, "value": <any> },
+    ...
+  }
+cursor.callproc(procedure, schema, params)
+```
+
 
 ## Multithreading
 This library supports multithreading. You can make use of that like so:
