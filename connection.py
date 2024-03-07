@@ -14,13 +14,7 @@ class Connection:
     """
     def __init__(self, base_url: str = None, username: str = None,
                  password: str = None, config_path: str = None,
-                 operation_type: str = None, workspace: str = None):
-
-        endpoint_map = {
-            'query': '/query',
-            'batch': '/batch',
-            'exec': '/exec'
-        }
+                 workspace: str = None):
 
         if config_path:
             # Initialize connection from configuration file
@@ -28,8 +22,7 @@ class Connection:
                          "with config")
             config = ConfigFactory.parse_file(config_path)
             config_base_url = config.get_string('cdata_api_db.base_url')
-            self.base_url = config_base_url.rstrip('/') + \
-                endpoint_map.get(operation_type, '/query')
+            self.base_url = config_base_url.rstrip('/')
 
             if workspace is not None:
                 self.base_url += f"?workspace={workspace}"
@@ -40,8 +33,7 @@ class Connection:
             # Initialize connection from parameters
             logger.debug("Connection - Initialising Connection with"
                          "username and password")
-            self.base_url = base_url.rstrip('/') + \
-                endpoint_map.get(operation_type, '/query')
+            self.base_url = base_url.rstrip('/')
 
             if workspace is not None:
                 self.base_url += f"?workspace={workspace}"

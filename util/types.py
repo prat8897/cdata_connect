@@ -24,15 +24,7 @@ def convert_to_python_type(value, data_type):
         return bytearray(value)
     elif data_type == 'VARCHAR':
         return str(value)
+    elif data_type == 'NULL':
+        return None
     else:
         raise ValueError(f"Unsupported data type: {data_type}")
-
-
-"""
-# Example usage
-value = '2024-01-31'
-data_type = 'Date'
-converted_value = convert_to_python_type(value, data_type)
-print(f"Original: {value} ({data_type}), Converted: {converted_value}"
-       "({type(converted_value)})")
-"""

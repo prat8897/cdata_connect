@@ -1,7 +1,6 @@
 import requests
-import json
-from .log import logger
 import ijson
+from .log import logger
 from .util.types import convert_to_python_type
 
 
@@ -14,68 +13,192 @@ class Cursor:
     def __init__(self, connection):
         self.connection = connection
         self.schema = None
-        self.rows = None
+        self.rows = []
         self.current_row = 0
+        self._rows_generator = None
 
-    def execute(self, query: str):
+    def execute(self, query: str, params: dict = None):
+
+        if params is not None and not isinstance(params, dict):
+            raise ValueError("Params must be a dictionary")
+
+        if params:
+            query = query % params
+
         json_object = {"query": query}
         logger.info("Cursor - Sending API request to "
                     f"{self.connection.base_url} with json: {json_object}")
-        response = requests.post(
-            f"{self.connection.base_url}",
-            auth=self.connection.auth,
-            json=json_object,
-            stream=True
-        )
-        if response.status_code != 200:
-            error_string = "Cursor - API request failed with status code "\
-                           f"{response.status_code}: {response.text}"
+
+        self.response = requests.post(f"{self.connection.base_url}/query",
+                                      auth=self.connection.auth,
+                                      json=json_object,
+                                      stream=True)
+
+        # Initialize the rows and schema as empty lists
+        self.rows = []
+        self.schema = []
+
+        if self.response.status_code == 200:
+
+            # Use ijson to parse the response incrementally
+            parser = ijson.parse(self.response.raw)
+            prefix, event, value = next(parser)
+
+            # Assuming the first relevant key in the JSON is 'results.item'
+            while not (prefix == 'results.item' and event == 'start_map'):
+                prefix, event, value = next(parser)
+
+            # Process the JSON elements inside 'results.item'
+            inside_schema = False
+            for prefix, event, value in parser:
+                if event == 'start_map' and 'schema' in prefix:
+                    inside_schema = True
+                elif event == 'end_map' and inside_schema:
+                    inside_schema = False
+                elif inside_schema and event in ['string', 'number']:
+                    self.schema.append((prefix, value))
+                elif 'rows.item' in prefix and event == 'start_array':
+                    self.rows.append([])
+                elif prefix.endswith('.item') and event in \
+                        ['string', 'number']:
+                    self.rows[-1].append(value)
+
+        else:
+            error_string = f"Cursor - API request failed with status code\
+                    {self.response.status_code}: {self.response.text}"
             logger.error(error_string)
             raise Exception(error_string)
 
-        self.row_generator = self._row_generator(response.content)
+        return self
 
-        logger.info(f"Cursor - Received response: {response.text}")
-        data = json.loads(response.text)
-        self.schema = data['results'][0]['schema']
-        self.rows = data['results'][0]['rows']
-        self.current_row = 0
-        return data
+    def executemany(self, query: str, schema: str, params: list = None):
 
-    def _row_generator(self, raw_response):
-        items = ijson.items(raw_response, 'results.item.rows.item')
-        for item in items:
-            yield item
+        json_object = {"query": query,
+                       "defaultSchema": schema,
+                       "parameters": params}
+
+        logger.info("Cursor - Sending API request to "
+                    f"{self.connection.base_url} with json: {json_object}")
+
+        self.response = requests.post(f"{self.connection.base_url}/batch",
+                                      auth=self.connection.auth,
+                                      json=json_object,
+                                      stream=True)
+
+        # Initialize the rows and schema as empty lists
+        self.rows = []
+        self.schema = []
+
+        if self.response.status_code == 200:
+
+            # Use ijson to parse the response incrementally
+            parser = ijson.parse(self.response.raw)
+            prefix, event, value = next(parser)
+
+            # Assuming the first relevant key in the JSON is 'results.item'
+            while not (prefix == 'results.item' and event == 'start_map'):
+                prefix, event, value = next(parser)
+
+            # Process the JSON elements inside 'results.item'
+            inside_schema = False
+            for prefix, event, value in parser:
+                if event == 'start_map' and 'schema' in prefix:
+                    inside_schema = True
+                elif event == 'end_map' and inside_schema:
+                    inside_schema = False
+                elif inside_schema and event in ['string', 'number']:
+                    self.schema.append((prefix, value))
+                elif 'rows.item' in prefix and event == 'start_array':
+                    self.rows.append([])
+                elif prefix.endswith('.item') and event in\
+                        ['string', 'number']:
+                    self.rows[-1].append(value)
+
+        else:
+            error_string = f"Cursor - API request failed with status code\
+                    {self.response.status_code}: {self.response.text}"
+            logger.error(error_string)
+            raise Exception(error_string)
+
+        return self
+
+    def callproc(self, procedure: str, schema: str, params: dict = None):
+
+        if params is not None and not isinstance(params, dict):
+            raise ValueError("Params must be a dictionary")
+
+        json_object = {"procedure": procedure,
+                       "defaultSchema": schema,
+                       "parameters": params}
+        logger.info("Cursor - Sending API request to "
+                    f"{self.connection.base_url} with json: {json_object}")
+
+        self.response = requests.post(f"{self.connection.base_url}/query",
+                                      auth=self.connection.auth,
+                                      json=json_object,
+                                      stream=True)
+
+        # Initialize the rows and schema as empty lists
+        self.rows = []
+        self.schema = []
+
+        if self.response.status_code == 200:
+
+            # Use ijson to parse the response incrementally
+            parser = ijson.parse(self.response.raw)
+            prefix, event, value = next(parser)
+
+            # Assuming the first relevant key in the JSON is 'results.item'
+            while not (prefix == 'results.item' and event == 'start_map'):
+                prefix, event, value = next(parser)
+
+            # Process the JSON elements inside 'results.item'
+            inside_schema = False
+            for prefix, event, value in parser:
+                if event == 'start_map' and 'schema' in prefix:
+                    inside_schema = True
+                elif event == 'end_map' and inside_schema:
+                    inside_schema = False
+                elif inside_schema and event in ['string', 'number']:
+                    self.schema.append((prefix, value))
+                elif 'rows.item' in prefix and event == 'start_array':
+                    self.rows.append([])
+                elif prefix.endswith('.item') and event in\
+                        ['string', 'number']:
+                    self.rows[-1].append(value)
+
+        else:
+            error_string = f"Cursor - API request failed with status code\
+                    {self.response.status_code}: {self.response.text}"
+            logger.error(error_string)
+            raise Exception(error_string)
+
+        return self
 
     def _convert_row(self, row):
-        converted_row = []
-        for idx, value in enumerate(row):
-            data_type_name = self.schema[idx]['dataTypeName']
-            converted_row.append(convert_to_python_type(value, data_type_name))
+        data_type_names = [value for key, value in self.schema
+                           if 'dataTypeName' in key]
+
+        converted_row = [convert_to_python_type(value, data_type_name)
+                         for data_type_name, value in
+                         zip(data_type_names, row)]
         return converted_row
 
     def fetchone(self):
-        if self.row_generator:
-            try:
-                raw_row = next(self.row_generator)
-                return self._convert_row(raw_row)
-            except StopIteration:
-                return None
+        if not self.rows:
+            return None
+        return self._convert_row(self.rows.pop(0))
 
     def fetchall(self):
-        all_rows = []
-        while True:
-            row = self.fetchone()
-            if row is None:
-                break
-            all_rows.append(row)
-        return all_rows
+        # This consumes the iterator and gathers the rest of the items
+        rows = list([self._convert_row(row) for row in self.rows])
+        return rows
 
     def fetchmany(self, size: int = 1):
-        many_rows = []
+        rows = []
         for _ in range(size):
-            row = self.fetchone()
-            if row is None:
-                break
-            many_rows.append(row)
-        return many_rows
+            try:
+                rows.append(self._convert_row(self.rows.pop(0)))
+            except StopIteration:
+                break  # Stop if there are no more items
+        return rows
