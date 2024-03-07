@@ -3,7 +3,7 @@ from .connection import Connection
 
 def connect(config_path: str = None, base_url: str = None,
             username: str = None, password: str = None,
-            operation_type: str = None, workspace: str = None):
+            workspace: str = None):
     """
     Create a connection to the CData Connect API.
 
@@ -16,22 +16,19 @@ def connect(config_path: str = None, base_url: str = None,
     """
     if not workspace:
         if config_path:
-            return Connection(config_path=config_path,
-                              operation_type=operation_type)
+            return Connection(config_path=config_path)
         elif base_url and username and password:
-            return Connection(base_url=base_url, username=username,
-                              password=password, operation_type=operation_type)
+            return Connection(base_url=base_url, username=username)
         else:
             raise ValueError("Either config_path or base_url, username,"
                              "and password must be provided.")
     elif workspace:
         if config_path:
-            return Connection(config_path=config_path,
-                              operation_type=operation_type)
+            return Connection(config_path=config_path)
         elif base_url and username and password:
             workspace_url = f"{base_url}?workspace={workspace}"
             return Connection(base_url=workspace_url, username=username,
-                              password=password, operation_type=operation_type)
+                              password=password)
         else:
             raise ValueError("Either config_path or base_url, username,"
                              "and password must be provided.")
