@@ -34,34 +34,51 @@ class Cursor:
                                       json=json_object,
                                       stream=True)
 
-        # Initialize the rows and schema as empty lists
+        # Initialize variables
         self.rows = []
         self.schema = []
+        self.rowcount = None  # Reset to None every time execute is called
 
         if self.response.status_code == 200:
-
-            # Use ijson to parse the response incrementally
+            # Parsing the JSON stream
             parser = ijson.parse(self.response.raw)
-            prefix, event, value = next(parser)
-
-            # Assuming the first relevant key in the JSON is 'results.item'
-            while not (prefix == 'results.item' and event == 'start_map'):
-                prefix, event, value = next(parser)
-
-            # Process the JSON elements inside 'results.item'
+            
+            # Variables to help navigate the JSON structure
             inside_schema = False
+            inside_rows = False
+
             for prefix, event, value in parser:
-                if event == 'start_map' and 'schema' in prefix:
+                if prefix == 'results.item.schema.item' and \
+                        event == 'start_map':
+                    # Start of a new schema item
                     inside_schema = True
-                elif event == 'end_map' and inside_schema:
+                    current_schema_item = {}
+                elif prefix == 'results.item.schema.item' and \
+                        event == 'end_map':
+                    # End of the current schema item
                     inside_schema = False
-                elif inside_schema and event in ['string', 'number']:
-                    self.schema.append((prefix, value))
-                elif 'rows.item' in prefix and event == 'start_array':
-                    self.rows.append([])
-                elif prefix.endswith('.item') and event in \
-                        ['string', 'number']:
-                    self.rows[-1].append(value)
+                    self.schema.append(current_schema_item)
+                elif inside_schema:
+                    # Collect schema information
+                    # Get the last part of the prefix as the key
+                    key = prefix.split('.')[-1]
+                    current_schema_item[key] = value
+                elif prefix == 'results.item.rows.item' and \
+                        event == 'start_array':
+                    # Start of a new row
+                    inside_rows = True
+                    current_row = []
+                elif prefix == 'results.item.rows.item' and \
+                        event == 'end_array':
+                    # End of the current row
+                    inside_rows = False
+                    self.rows.append(current_row)
+                elif inside_rows and event in ['string', 'number']:
+                    # Append values to the current row
+                    current_row.append(value)
+                elif prefix == 'results.item.affectedRows':
+                    # Store the affectedRows value
+                    self.rowcount = value
 
         else:
             error_string = f"Cursor - API request failed with status code\
@@ -85,34 +102,51 @@ class Cursor:
                                       json=json_object,
                                       stream=True)
 
-        # Initialize the rows and schema as empty lists
+        # Initialize variables
         self.rows = []
         self.schema = []
+        self.rowcount = None  # Reset to None every time execute is called
 
         if self.response.status_code == 200:
-
-            # Use ijson to parse the response incrementally
+            # Parsing the JSON stream
             parser = ijson.parse(self.response.raw)
-            prefix, event, value = next(parser)
-
-            # Assuming the first relevant key in the JSON is 'results.item'
-            while not (prefix == 'results.item' and event == 'start_map'):
-                prefix, event, value = next(parser)
-
-            # Process the JSON elements inside 'results.item'
+            
+            # Variables to help navigate the JSON structure
             inside_schema = False
+            inside_rows = False
+
             for prefix, event, value in parser:
-                if event == 'start_map' and 'schema' in prefix:
+                if prefix == 'results.item.schema.item' and \
+                        event == 'start_map':
+                    # Start of a new schema item
                     inside_schema = True
-                elif event == 'end_map' and inside_schema:
+                    current_schema_item = {}
+                elif prefix == 'results.item.schema.item' and \
+                        event == 'end_map':
+                    # End of the current schema item
                     inside_schema = False
-                elif inside_schema and event in ['string', 'number']:
-                    self.schema.append((prefix, value))
-                elif 'rows.item' in prefix and event == 'start_array':
-                    self.rows.append([])
-                elif prefix.endswith('.item') and event in\
-                        ['string', 'number']:
-                    self.rows[-1].append(value)
+                    self.schema.append(current_schema_item)
+                elif inside_schema:
+                    # Collect schema information
+                    # Get the last part of the prefix as the key
+                    key = prefix.split('.')[-1]
+                    current_schema_item[key] = value
+                elif prefix == 'results.item.rows.item' and \
+                        event == 'start_array':
+                    # Start of a new row
+                    inside_rows = True
+                    current_row = []
+                elif prefix == 'results.item.rows.item' and \
+                        event == 'end_array':
+                    # End of the current row
+                    inside_rows = False
+                    self.rows.append(current_row)
+                elif inside_rows and event in ['string', 'number']:
+                    # Append values to the current row
+                    current_row.append(value)
+                elif prefix == 'results.item.affectedRows':
+                    # Store the affectedRows value
+                    self.rowcount = value
 
         else:
             error_string = f"Cursor - API request failed with status code\
@@ -138,34 +172,51 @@ class Cursor:
                                       json=json_object,
                                       stream=True)
 
-        # Initialize the rows and schema as empty lists
+        # Initialize variables
         self.rows = []
         self.schema = []
+        self.rowcount = None  # Reset to None every time execute is called
 
         if self.response.status_code == 200:
-
-            # Use ijson to parse the response incrementally
+            # Parsing the JSON stream
             parser = ijson.parse(self.response.raw)
-            prefix, event, value = next(parser)
-
-            # Assuming the first relevant key in the JSON is 'results.item'
-            while not (prefix == 'results.item' and event == 'start_map'):
-                prefix, event, value = next(parser)
-
-            # Process the JSON elements inside 'results.item'
+            
+            # Variables to help navigate the JSON structure
             inside_schema = False
+            inside_rows = False
+
             for prefix, event, value in parser:
-                if event == 'start_map' and 'schema' in prefix:
+                if prefix == 'results.item.schema.item' and \
+                        event == 'start_map':
+                    # Start of a new schema item
                     inside_schema = True
-                elif event == 'end_map' and inside_schema:
+                    current_schema_item = {}
+                elif prefix == 'results.item.schema.item' and \
+                        event == 'end_map':
+                    # End of the current schema item
                     inside_schema = False
-                elif inside_schema and event in ['string', 'number']:
-                    self.schema.append((prefix, value))
-                elif 'rows.item' in prefix and event == 'start_array':
-                    self.rows.append([])
-                elif prefix.endswith('.item') and event in\
-                        ['string', 'number']:
-                    self.rows[-1].append(value)
+                    self.schema.append(current_schema_item)
+                elif inside_schema:
+                    # Collect schema information
+                    # Get the last part of the prefix as the key
+                    key = prefix.split('.')[-1]
+                    current_schema_item[key] = value
+                elif prefix == 'results.item.rows.item' and \
+                        event == 'start_array':
+                    # Start of a new row
+                    inside_rows = True
+                    current_row = []
+                elif prefix == 'results.item.rows.item' and \
+                        event == 'end_array':
+                    # End of the current row
+                    inside_rows = False
+                    self.rows.append(current_row)
+                elif inside_rows and event in ['string', 'number']:
+                    # Append values to the current row
+                    current_row.append(value)
+                elif prefix == 'results.item.affectedRows':
+                    # Store the affectedRows value
+                    self.rowcount = value
 
         else:
             error_string = f"Cursor - API request failed with status code\
@@ -176,12 +227,15 @@ class Cursor:
         return self
 
     def _convert_row(self, row):
-        data_type_names = [value for key, value in self.schema
-                           if 'dataTypeName' in key]
+        # Extract 'dataTypeName' values from each dictionary in self.schema
+        data_type_names = [schema_item['dataTypeName'] for
+                           schema_item in self.schema]
 
+        # Assuming convert_to_python_type is a function 
+        # you have defined elsewhere that converts each value to 
+        # the correct Python type based on data_type_name
         converted_row = [convert_to_python_type(value, data_type_name)
-                         for data_type_name, value in
-                         zip(data_type_names, row)]
+                         for data_type_name, value in zip(data_type_names, row)]
         return converted_row
 
     def fetchone(self):
@@ -199,6 +253,6 @@ class Cursor:
         for _ in range(size):
             try:
                 rows.append(self._convert_row(self.rows.pop(0)))
-            except StopIteration:
+            except IndexError:
                 break  # Stop if there are no more items
         return rows
