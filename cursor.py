@@ -231,12 +231,20 @@ class Cursor:
         data_type_names = [schema_item['dataTypeName'] for
                            schema_item in self.schema]
 
-        # Assuming convert_to_python_type is a function 
-        # you have defined elsewhere that converts each value to 
-        # the correct Python type based on data_type_name
         converted_row = [convert_to_python_type(value, data_type_name)
                          for data_type_name, value in zip(data_type_names, row)]
         return converted_row
+
+    def close(self):
+        # Close the response stream if it's open
+        if self.response and not self.response.closed:
+            self.response.close()
+            self.response = None
+
+        # Reset the cursor state
+        self.rows = None
+        self.schema = None
+        self.rowcount = None
 
     def fetchone(self):
         if not self.rows:
