@@ -21,6 +21,8 @@ class Connection:
         self._local = threading.local()
         if workspace is not None:
             self.workspace = workspace
+        else:
+            self.workspace = None
 
         if config_path:
             # Initialize connection from configuration file
