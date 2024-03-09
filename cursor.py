@@ -20,6 +20,10 @@ class Cursor:
         self.current_row = 0
         self._rowcount = None
 
+    def _check_connection(self):
+        if not self.connection.is_open:
+            raise Exception("Operation on closed connection is not allowed")
+
     @property
     def description(self):
         if self.schema:
@@ -33,6 +37,7 @@ class Cursor:
         return self._rowcount
 
     def _execute_request(self, url, json_object):
+        self._check_connection()
         try:
             with self._lock:
                 logger.info("Cursor - Sending API request to "
@@ -83,6 +88,7 @@ class Cursor:
                                           'results.item.rows.item')
 
     def execute(self, query: str, params: dict = None):
+        self._check_connection()
         self._rowcount = None
         if params is not None and not isinstance(params, dict):
             raise ValueError("Params must be a dictionary")
@@ -99,6 +105,7 @@ class Cursor:
         self._execute_request(base_url, json_object)
 
     def executemany(self, query: str, schema: str, params: list = None):
+        self._check_connection()
         self._rowcount = None
         json_object = {"query": query,
                        "defaultSchema": schema,
@@ -111,6 +118,7 @@ class Cursor:
         self._execute_request(f"{base_url}", json_object)
 
     def callproc(self, procedure: str, schema: str, params: dict = None):
+        self._check_connection()
         self._rowcount = None
         if params is not None and not isinstance(params, dict):
             raise ValueError("Params must be a dictionary")
@@ -133,6 +141,7 @@ class Cursor:
         return converted_row
 
     def close(self):
+        self._check_connection()
         # Close the response stream if it exists and hasn't been consumed
         if self.response is not None:
             try:
@@ -146,6 +155,7 @@ class Cursor:
         self.connection = None
 
     def fetchone(self):
+        self._check_connection()
         try:
             current_row = next(self.rows_generator)
             processed_row = self._convert_row(current_row)
@@ -154,6 +164,7 @@ class Cursor:
             return None
 
     def fetchall(self):
+        self._check_connection()
         processed_rows = []
         for row in self.rows_generator:
             processed_row = [self._convert_row([value])[0] for value in row]
@@ -161,6 +172,7 @@ class Cursor:
         return processed_rows
 
     def fetchmany(self, size: int = 1):
+        self._check_connection()
         if size is None:
             size = self.arraysize
 

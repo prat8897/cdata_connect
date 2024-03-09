@@ -19,6 +19,8 @@ class Connection:
                  workspace: str = None):
 
         self._local = threading.local()
+        self.is_open = True
+
         if workspace is not None:
             self.workspace = workspace
         else:
@@ -64,6 +66,9 @@ class Connection:
         support transactions."""
 
         pass
+
+    def close(self):
+        self.is_open = False
 
     def cursor(self):
         if not hasattr(self._local, 'cursor'):
