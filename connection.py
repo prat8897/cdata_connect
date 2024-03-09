@@ -1,4 +1,5 @@
 from pyhocon import ConfigFactory
+import threading
 from .cursor import Cursor
 from .log import logger
 
@@ -15,6 +16,8 @@ class Connection:
     def __init__(self, base_url: str = None, username: str = None,
                  password: str = None, config_path: str = None,
                  workspace: str = None):
+
+        self._local = threading.local()
 
         if config_path:
             # Initialize connection from configuration file
@@ -41,4 +44,6 @@ class Connection:
             self.auth = (username, password)
 
     def cursor(self):
-        return Cursor(self)
+        if not hasattr(self._local, 'cursor'):
+            self._local.cursor = Cursor(self)
+        return self._local.cursor
