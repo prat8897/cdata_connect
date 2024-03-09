@@ -28,3 +28,59 @@ def convert_to_python_type(value, data_type):
         return None
     else:
         raise ValueError(f"Unsupported data type: {data_type}")
+
+
+class Date:
+    def __init__(self, year, month, day):
+        self.year = year
+        self.month = month
+        self.day = day
+
+    @classmethod
+    def fromtimestamp(cls, timestamp):
+        date = datetime.fromtimestamp(timestamp).date()
+        return cls(date.year, date.month, date.day)
+
+
+class Time:
+    def __init__(self, hour, minute, second):
+        self.hour = hour
+        self.minute = minute
+        self.second = second
+
+    @classmethod
+    def fromtimestamp(cls, timestamp):
+        time = datetime.fromtimestamp(timestamp).time()
+        return cls(time.hour, time.minute, time.second)
+
+
+class Timestamp:
+    def __init__(self, year, month, day, hour, minute, second):
+        self.year = year
+        self.month = month
+        self.day = day
+        self.hour = hour
+        self.minute = minute
+        self.second = second
+
+    @classmethod
+    def fromtimestamp(cls, timestamp):
+        dt = datetime.fromtimestamp(timestamp)
+        return cls(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+
+
+def DateFromTicks(ticks):
+    return Date.fromtimestamp(ticks)
+
+
+def TimeFromTicks(ticks):
+    return Time.fromtimestamp(ticks)
+
+
+def TimestampFromTicks(ticks):
+    return Timestamp.fromtimestamp(ticks)
+
+
+class Binary:
+    def __init__(self, data):
+        self.data = data

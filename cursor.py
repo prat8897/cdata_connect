@@ -3,6 +3,7 @@ import ijson
 import threading
 from .log import logger
 from .util.types import convert_to_python_type
+from .exceptions import *
 
 
 class Cursor:
@@ -17,218 +18,272 @@ class Cursor:
         self.schema = None
         self.rows = []
         self.current_row = 0
+        self._rowcount = None
+
+    @property
+    def description(self):
+        if self.schema:
+            return [(column['columnName'], column['dataTypeName'],
+                     None, None, None, None, None)
+                    for column in self.schema]
+        return None
+
+    def rowcount(self):
+        return self._rowcount
 
     def execute(self, query: str, params: dict = None):
+        self._rowcount = None        
+        try:
+            with self._lock:
+                if params is not None and not isinstance(params, dict):
+                    raise ValueError("Params must be a dictionary")
 
-        with self._lock:
-            if params is not None and not isinstance(params, dict):
-                raise ValueError("Params must be a dictionary")
+                if params:
+                    query = query % params
 
-            if params:
-                query = query % params
+                json_object = {"query": query}
+                logger.info("Cursor - Sending API request to "
+                            f"{self.connection.base_url} with json: "
+                            f"{json_object}")
 
-            json_object = {"query": query}
-            logger.info("Cursor - Sending API request to "
-                        f"{self.connection.base_url} with json: {json_object}")
+                self.response = requests.post(
+                    f"{self.connection.base_url}/query",
+                    auth=self.connection.auth,
+                    json=json_object,
+                    stream=True)
 
-            self.response = requests.post(f"{self.connection.base_url}/query",
-                                          auth=self.connection.auth,
-                                          json=json_object,
-                                          stream=True)
+                # Initialize variables
+                self.rows = []
+                self.schema = []
+                # Reset to None every time execute is called
+                self.rowcount = None
 
-            # Initialize variables
-            self.rows = []
-            self.schema = []
-            self.rowcount = None  # Reset to None every time execute is called
+                if self.response.status_code == 200:
+                    # Parsing the JSON stream
+                    parser = ijson.parse(self.response.raw)
 
-            if self.response.status_code == 200:
-                # Parsing the JSON stream
-                parser = ijson.parse(self.response.raw)
+                    # Variables to help navigate the JSON structure
+                    inside_schema = False
+                    inside_rows = False
 
-                # Variables to help navigate the JSON structure
-                inside_schema = False
-                inside_rows = False
+                    for prefix, event, value in parser:
+                        if prefix == 'results.item.schema.item' and \
+                                event == 'start_map':
+                            # Start of a new schema item
+                            inside_schema = True
+                            current_schema_item = {}
+                        elif prefix == 'results.item.schema.item' and \
+                                event == 'end_map':
+                            # End of the current schema item
+                            inside_schema = False
+                            self.schema.append(current_schema_item)
+                        elif inside_schema:
+                            # Collect schema information
+                            # Get the last part of the prefix as the key
+                            key = prefix.split('.')[-1]
+                            current_schema_item[key] = value
+                        elif prefix == 'results.item.rows.item' and \
+                                event == 'start_array':
+                            # Start of a new row
+                            inside_rows = True
+                            current_row = []
+                        elif prefix == 'results.item.rows.item' and \
+                                event == 'end_array':
+                            # End of the current row
+                            inside_rows = False
+                            self.rows.append(current_row)
+                        elif inside_rows and event in ['string', 'number']:
+                            # Append values to the current row
+                            current_row.append(value)
+                        elif prefix == 'results.item.affectedRows':
+                            # Store the affectedRows value
+                            self._rowcount = value
 
-                for prefix, event, value in parser:
-                    if prefix == 'results.item.schema.item' and \
-                            event == 'start_map':
-                        # Start of a new schema item
-                        inside_schema = True
-                        current_schema_item = {}
-                    elif prefix == 'results.item.schema.item' and \
-                            event == 'end_map':
-                        # End of the current schema item
-                        inside_schema = False
-                        self.schema.append(current_schema_item)
-                    elif inside_schema:
-                        # Collect schema information
-                        # Get the last part of the prefix as the key
-                        key = prefix.split('.')[-1]
-                        current_schema_item[key] = value
-                    elif prefix == 'results.item.rows.item' and \
-                            event == 'start_array':
-                        # Start of a new row
-                        inside_rows = True
-                        current_row = []
-                    elif prefix == 'results.item.rows.item' and \
-                            event == 'end_array':
-                        # End of the current row
-                        inside_rows = False
-                        self.rows.append(current_row)
-                    elif inside_rows and event in ['string', 'number']:
-                        # Append values to the current row
-                        current_row.append(value)
-                    elif prefix == 'results.item.affectedRows':
-                        # Store the affectedRows value
-                        self.rowcount = value
+                else:
+                    error_string = f"Cursor - API request failed with status "\
+                                   f"code {self.response.status_code}:"\
+                                   f"{self.response.text}"
+                    logger.error(error_string)
+                    raise Exception(error_string)
 
-            else:
-                error_string = f"Cursor - API request failed with status code\
-                        {self.response.status_code}: {self.response.text}"
-                logger.error(error_string)
-                raise Exception(error_string)
+                return self
 
-            return self
+        except requests.exceptions.RequestException as e:
+            raise OperationalError(f"Error executing query: {str(e)}") from e
 
+        except ijson.JSONError as e:
+            raise DataError(f"Error parsing JSON response: {str(e)}") from e
+
+        except Exception as e:
+            raise DatabaseError(f"Unexpected error occurred: {str(e)}") from e
+        
     def executemany(self, query: str, schema: str, params: list = None):
+        self._rowcount = None
+        try:
+            with self._lock:
+                json_object = {"query": query,
+                            "defaultSchema": schema,
+                            "parameters": params}
 
-        with self._lock:
-            json_object = {"query": query,
-                           "defaultSchema": schema,
-                           "parameters": params}
+                logger.info("Cursor - Sending API request to "
+                            f"{self.connection.base_url} with json:"
+                            f"{json_object}")
 
-            logger.info("Cursor - Sending API request to "
-                        f"{self.connection.base_url} with json: {json_object}")
+                self.response = requests.post(
+                    f"{self.connection.base_url}/batch",
+                    auth=self.connection.auth,
+                    json=json_object,
+                    stream=True)
 
-            self.response = requests.post(f"{self.connection.base_url}/batch",
-                                          auth=self.connection.auth,
-                                          json=json_object,
-                                          stream=True)
+                # Initialize variables
+                self.rows = []
+                self.schema = []
+                # Reset to None every time execute is called
+                self.rowcount = None
 
-            # Initialize variables
-            self.rows = []
-            self.schema = []
-            self.rowcount = None  # Reset to None every time execute is called
+                if self.response.status_code == 200:
+                    # Parsing the JSON stream
+                    parser = ijson.parse(self.response.raw)
 
-            if self.response.status_code == 200:
-                # Parsing the JSON stream
-                parser = ijson.parse(self.response.raw)
+                    # Variables to help navigate the JSON structure
+                    inside_schema = False
+                    inside_rows = False
 
-                # Variables to help navigate the JSON structure
-                inside_schema = False
-                inside_rows = False
+                    for prefix, event, value in parser:
+                        if prefix == 'results.item.schema.item' and \
+                                event == 'start_map':
+                            # Start of a new schema item
+                            inside_schema = True
+                            current_schema_item = {}
+                        elif prefix == 'results.item.schema.item' and \
+                                event == 'end_map':
+                            # End of the current schema item
+                            inside_schema = False
+                            self.schema.append(current_schema_item)
+                        elif inside_schema:
+                            # Collect schema information
+                            # Get the last part of the prefix as the key
+                            key = prefix.split('.')[-1]
+                            current_schema_item[key] = value
+                        elif prefix == 'results.item.rows.item' and \
+                                event == 'start_array':
+                            # Start of a new row
+                            inside_rows = True
+                            current_row = []
+                        elif prefix == 'results.item.rows.item' and \
+                                event == 'end_array':
+                            # End of the current row
+                            inside_rows = False
+                            self.rows.append(current_row)
+                        elif inside_rows and event in ['string', 'number']:
+                            # Append values to the current row
+                            current_row.append(value)
+                        elif prefix == 'results.item.affectedRows':
+                            # Store the affectedRows value
+                            self._rowcount = value
 
-                for prefix, event, value in parser:
-                    if prefix == 'results.item.schema.item' and \
-                            event == 'start_map':
-                        # Start of a new schema item
-                        inside_schema = True
-                        current_schema_item = {}
-                    elif prefix == 'results.item.schema.item' and \
-                            event == 'end_map':
-                        # End of the current schema item
-                        inside_schema = False
-                        self.schema.append(current_schema_item)
-                    elif inside_schema:
-                        # Collect schema information
-                        # Get the last part of the prefix as the key
-                        key = prefix.split('.')[-1]
-                        current_schema_item[key] = value
-                    elif prefix == 'results.item.rows.item' and \
-                            event == 'start_array':
-                        # Start of a new row
-                        inside_rows = True
-                        current_row = []
-                    elif prefix == 'results.item.rows.item' and \
-                            event == 'end_array':
-                        # End of the current row
-                        inside_rows = False
-                        self.rows.append(current_row)
-                    elif inside_rows and event in ['string', 'number']:
-                        # Append values to the current row
-                        current_row.append(value)
-                    elif prefix == 'results.item.affectedRows':
-                        # Store the affectedRows value
-                        self.rowcount = value
+                else:
+                    error_string = f"Cursor - API request failed with status "\
+                                   f"code {self.response.status_code}:"\
+                                   f"{self.response.text}"
+                    logger.error(error_string)
+                    raise Exception(error_string)
 
-            else:
-                error_string = f"Cursor - API request failed with status code\
-                        {self.response.status_code}: {self.response.text}"
-                logger.error(error_string)
-                raise Exception(error_string)
+                return self
+            
+        except requests.exceptions.RequestException as e:
+            raise OperationalError(f"Error executing batch query: {str(e)}") from e
 
-            return self
+        except ijson.JSONError as e:
+            raise DataError(f"Error parsing JSON response: {str(e)}") from e
+
+        except Exception as e:
+            raise DatabaseError(f"Unexpected error occurred: {str(e)}") from e
 
     def callproc(self, procedure: str, schema: str, params: dict = None):
+        self._rowcount = None
+        try:
+            with self._lock:
+                if params is not None and not isinstance(params, dict):
+                    raise ValueError("Params must be a dictionary")
 
-        with self._lock:
-            if params is not None and not isinstance(params, dict):
-                raise ValueError("Params must be a dictionary")
+                json_object = {"procedure": procedure,
+                               "defaultSchema": schema,
+                               "parameters": params}
+                logger.info("Cursor - Sending API request to "
+                            f"{self.connection.base_url} with json:"
+                            f"{json_object}")
 
-            json_object = {"procedure": procedure,
-                           "defaultSchema": schema,
-                           "parameters": params}
-            logger.info("Cursor - Sending API request to "
-                        f"{self.connection.base_url} with json: {json_object}")
+                self.response = requests.post(
+                    f"{self.connection.base_url}/query",
+                    auth=self.connection.auth,
+                    json=json_object,
+                    stream=True)
 
-            self.response = requests.post(f"{self.connection.base_url}/query",
-                                          auth=self.connection.auth,
-                                          json=json_object,
-                                          stream=True)
+                # Initialize variables
+                self.rows = []
+                self.schema = []
+                # Reset to None every time execute is called
+                self.rowcount = None
 
-            # Initialize variables
-            self.rows = []
-            self.schema = []
-            self.rowcount = None  # Reset to None every time execute is called
+                if self.response.status_code == 200:
+                    # Parsing the JSON stream
+                    parser = ijson.parse(self.response.raw)
 
-            if self.response.status_code == 200:
-                # Parsing the JSON stream
-                parser = ijson.parse(self.response.raw)
+                    # Variables to help navigate the JSON structure
+                    inside_schema = False
+                    inside_rows = False
 
-                # Variables to help navigate the JSON structure
-                inside_schema = False
-                inside_rows = False
+                    for prefix, event, value in parser:
+                        if prefix == 'results.item.schema.item' and \
+                                event == 'start_map':
+                            # Start of a new schema item
+                            inside_schema = True
+                            current_schema_item = {}
+                        elif prefix == 'results.item.schema.item' and \
+                                event == 'end_map':
+                            # End of the current schema item
+                            inside_schema = False
+                            self.schema.append(current_schema_item)
+                        elif inside_schema:
+                            # Collect schema information
+                            # Get the last part of the prefix as the key
+                            key = prefix.split('.')[-1]
+                            current_schema_item[key] = value
+                        elif prefix == 'results.item.rows.item' and \
+                                event == 'start_array':
+                            # Start of a new row
+                            inside_rows = True
+                            current_row = []
+                        elif prefix == 'results.item.rows.item' and \
+                                event == 'end_array':
+                            # End of the current row
+                            inside_rows = False
+                            self.rows.append(current_row)
+                        elif inside_rows and event in ['string', 'number']:
+                            # Append values to the current row
+                            current_row.append(value)
+                        elif prefix == 'results.item.affectedRows':
+                            # Store the affectedRows value
+                            self._rowcount = value
 
-                for prefix, event, value in parser:
-                    if prefix == 'results.item.schema.item' and \
-                            event == 'start_map':
-                        # Start of a new schema item
-                        inside_schema = True
-                        current_schema_item = {}
-                    elif prefix == 'results.item.schema.item' and \
-                            event == 'end_map':
-                        # End of the current schema item
-                        inside_schema = False
-                        self.schema.append(current_schema_item)
-                    elif inside_schema:
-                        # Collect schema information
-                        # Get the last part of the prefix as the key
-                        key = prefix.split('.')[-1]
-                        current_schema_item[key] = value
-                    elif prefix == 'results.item.rows.item' and \
-                            event == 'start_array':
-                        # Start of a new row
-                        inside_rows = True
-                        current_row = []
-                    elif prefix == 'results.item.rows.item' and \
-                            event == 'end_array':
-                        # End of the current row
-                        inside_rows = False
-                        self.rows.append(current_row)
-                    elif inside_rows and event in ['string', 'number']:
-                        # Append values to the current row
-                        current_row.append(value)
-                    elif prefix == 'results.item.affectedRows':
-                        # Store the affectedRows value
-                        self.rowcount = value
+                else:
+                    error_string = f"Cursor - API request failed with status "\
+                                   f"code{self.response.status_code}:"\
+                                   f"{self.response.text}"
+                    logger.error(error_string)
+                    raise Exception(error_string)
 
-            else:
-                error_string = f"Cursor - API request failed with status code\
-                        {self.response.status_code}: {self.response.text}"
-                logger.error(error_string)
-                raise Exception(error_string)
+                return self
 
-            return self
+        except requests.exceptions.RequestException as e:
+            raise OperationalError(f"Error executing batch query: {str(e)}") from e
+
+        except ijson.JSONError as e:
+            raise DataError(f"Error parsing JSON response: {str(e)}") from e
+
+        except Exception as e:
+            raise DatabaseError(f"Unexpected error occurred: {str(e)}") from e
 
     def _convert_row(self, row):
         # Extract 'dataTypeName' values from each dictionary in self.schema
@@ -246,6 +301,7 @@ class Cursor:
             self.response = None
 
         # Reset the cursor state
+        self.connection = None
         self.rows = None
         self.schema = None
         self.rowcount = None
@@ -261,6 +317,9 @@ class Cursor:
         return rows
 
     def fetchmany(self, size: int = 1):
+        if size is None:
+            size = self.arraysize
+
         rows = []
         for _ in range(size):
             try:
@@ -268,3 +327,12 @@ class Cursor:
             except IndexError:
                 break  # Stop if there are no more items
         return rows
+
+    @property
+    def arraysize(self):
+        # Default arraysize if not set
+        return getattr(self, '_arraysize', 1)
+
+    @arraysize.setter
+    def arraysize(self, value):
+        self._arraysize = value
