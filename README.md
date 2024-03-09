@@ -103,41 +103,23 @@ cursor.callproc(procedure, schema, params)
 ## Multithreading
 This library supports multithreading. You can make use of that like so:
 ```
-from cdata_connect.thread_safety import ThreadSafeConnectionHandler
 import threading
 
-def execute_query(query):
-    handler = ThreadSafeConnectionHandler()
-    connection = handler.get_connection(base_url="https://cloud.cdata.com/api/",
-                                        username="example@example.com",
-                                        password="<your_personal_access_token_here>",
-                                        operation_type='query')
-    cursor = connection.cursor()
-    try:
-        result = cursor.execute(query)
-        for row in cursor.fetchall():
-            print(row)  # Or process your result as needed
-    except Exception as e:
-        print(f"Query execution error: {e}")
+def execute_query(thread_id):
+    conn = Connection(config_path="main\config.conf")
+    cursor = conn.cursor()
+    query = "SELECT * FROM [Test1].[OData].[Airlines]"
+    cursor.execute(query)
+    resultone = cursor.fetchall()
+    print(resultone)
 
-def start_threads():
-    # List of queries to execute
-    queries = [
-        "SELECT * FROM table1",
-        "SELECT * FROM table2",
-        "UPDATE table1 SET column1 = value WHERE condition",
-    ]
 
-    threads = []
+threads = []
+for i in range(5):
+    thread = threading.Thread(target=execute_query, args=(i,))
+    threads.append(thread)
+    thread.start()
 
-    for query in queries:
-        thread = threading.Thread(target=execute_query, args=(query,))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
-
-if __name__ == "__main__":
-    start_threads()
+for thread in threads:
+    thread.join()
 ```
