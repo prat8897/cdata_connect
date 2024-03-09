@@ -36,7 +36,7 @@ class Cursor:
         try:
             with self._lock:
                 logger.info("Cursor - Sending API request to "
-                            f"{self.connection.base_url} with json:"
+                            f"{url} with json:"
                             f"{json_object}")
 
                 self.response = requests.post(
@@ -91,14 +91,24 @@ class Cursor:
             query = query % params
 
         json_object = {"query": query}
-        self._execute_request(f"{self.connection.base_url}/query", json_object)
+        if self.connection.workspace:
+            base_url = f"{self.connection.base_url}/query?workspace="\
+                       f"{self.connection.workspace}"
+        else:
+            base_url = f"{self.connection.base_url}/query"
+        self._execute_request(base_url, json_object)
 
     def executemany(self, query: str, schema: str, params: list = None):
         self._rowcount = None
         json_object = {"query": query,
                        "defaultSchema": schema,
                        "parameters": params}
-        self._execute_request(f"{self.connection.base_url}/batch", json_object)
+        if self.connection.workspace:
+            base_url = f"{self.connection.base_url}/batch?workspace="\
+                       f"{self.connection.workspace}"
+        else:
+            base_url = f"{self.connection.base_url}/batch"
+        self._execute_request(f"{base_url}", json_object)
 
     def callproc(self, procedure: str, schema: str, params: dict = None):
         self._rowcount = None
@@ -108,7 +118,12 @@ class Cursor:
         json_object = {"procedure": procedure,
                        "defaultSchema": schema,
                        "parameters": params}
-        self._execute_request(f"{self.connection.base_url}/exec", json_object)
+        if self.connection.workspace:
+            base_url = f"{self.connection.base_url}/exec?workspace="\
+                       f"{self.connection.workspace}"
+        else:
+            base_url = f"{self.connection.base_url}/exec"
+        self._execute_request(f"{base_url}", json_object)
 
     def _convert_row(self, row):
         data_type_names = [schema_item['dataTypeName'] for

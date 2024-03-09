@@ -19,6 +19,8 @@ class Connection:
                  workspace: str = None):
 
         self._local = threading.local()
+        if workspace is not None:
+            self.workspace = workspace
 
         if config_path:
             # Initialize connection from configuration file
@@ -34,9 +36,6 @@ class Connection:
                 raise ConfigurationError(f"Missing required configuration:"
                                          f"{str(e)}") from e
 
-            if workspace is not None:
-                self.base_url += f"?workspace={workspace}"
-
         else:
             # Initialize connection from parameters
             logger.debug("Connection - Initialising Connection with "
@@ -48,10 +47,6 @@ class Connection:
                                          "must be provided.")
 
             self.base_url = base_url.rstrip('/')
-
-            if workspace is not None:
-                self.base_url += f"?workspace={workspace}"
-
             self.auth = (username, password)
 
     def commit(self):
