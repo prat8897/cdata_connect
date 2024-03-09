@@ -2,6 +2,7 @@ from pyhocon import ConfigFactory
 import threading
 from .cursor import Cursor
 from .log import logger
+from .exceptions import *
 
 
 class Connection:
@@ -21,21 +22,31 @@ class Connection:
 
         if config_path:
             # Initialize connection from configuration file
-            logger.debug("Connection - Initialising Connection"
-                         "with config")
+            logger.debug("Connection - Initialising Connection with config")
             config = ConfigFactory.parse_file(config_path)
-            config_base_url = config.get_string('cdata_api_db.base_url')
-            self.base_url = config_base_url.rstrip('/')
+
+            try:
+                config_base_url = config.get_string('cdata_api_db.base_url')
+                self.base_url = config_base_url.rstrip('/')
+                self.auth = (config.get_string('cdata_api_db.username'),
+                             config.get_string('cdata_api_db.password'))
+            except FileNotFoundError as e:
+                raise ConfigurationError(f"Missing required configuration:"
+                                         f"{str(e)}") from e
 
             if workspace is not None:
                 self.base_url += f"?workspace={workspace}"
 
-            self.auth = (config.get_string('cdata_api_db.username'),
-                         config.get_string('cdata_api_db.password'))
         else:
             # Initialize connection from parameters
-            logger.debug("Connection - Initialising Connection with"
+            logger.debug("Connection - Initialising Connection with "
                          "username and password")
+
+            if base_url is None or username is None or password is None:
+                raise ConfigurationError("Missing required parameters:" 
+                                         "base_url, username, and password "
+                                         "must be provided.")
+
             self.base_url = base_url.rstrip('/')
 
             if workspace is not None:
@@ -44,19 +55,14 @@ class Connection:
             self.auth = (username, password)
 
     def commit(self):
-
         """Commit any pending transaction to the database.
-
         Since the underlying system does not support transactions,
-
         this method is implemented as a no-op.
-
         """
 
         pass
 
     def rollback(self):
-
         """This method is a no-op as the underlying system does not
         support transactions."""
 

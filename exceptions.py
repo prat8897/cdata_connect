@@ -36,3 +36,7 @@ class ProgrammingError(DatabaseError):
 
 class NotSupportedError(DatabaseError):
     pass
+
+
+class ConfigurationError(Error):
+    pass

@@ -16,7 +16,7 @@ class Cursor:
         self.connection = connection
         self._lock = threading.Lock()
         self.schema = None
-        self.rows = []
+        self.rows_generator = None
         self.current_row = 0
         self._rowcount = None
 
@@ -28,9 +28,10 @@ class Cursor:
                     for column in self.schema]
         return None
 
+    @property
     def rowcount(self):
         return self._rowcount
-    
+
     def _execute_request(self, url, json_object):
         try:
             with self._lock:
@@ -44,53 +45,10 @@ class Cursor:
                     json=json_object,
                     stream=True)
 
-                # Initialize variables
-                self.rows = []
-                self.schema = []
-                # Reset to None every time execute is called
-                self.rowcount = None
-
                 if self.response.status_code == 200:
-                    # Parsing the JSON stream
-                    parser = ijson.parse(self.response.raw)
-
-                    # Variables to help navigate the JSON structure
-                    inside_schema = False
-                    inside_rows = False
-
-                    for prefix, event, value in parser:
-                        if prefix == 'results.item.schema.item' and \
-                                event == 'start_map':
-                            # Start of a new schema item
-                            inside_schema = True
-                            current_schema_item = {}
-                        elif prefix == 'results.item.schema.item' and \
-                                event == 'end_map':
-                            # End of the current schema item
-                            inside_schema = False
-                            self.schema.append(current_schema_item)
-                        elif inside_schema:
-                            # Collect schema information
-                            # Get the last part of the prefix as the key
-                            key = prefix.split('.')[-1]
-                            current_schema_item[key] = value
-                        elif prefix == 'results.item.rows.item' and \
-                                event == 'start_array':
-                            # Start of a new row
-                            inside_rows = True
-                            current_row = []
-                        elif prefix == 'results.item.rows.item' and \
-                                event == 'end_array':
-                            # End of the current row
-                            inside_rows = False
-                            self.rows.append(current_row)
-                        elif inside_rows and event in ['string', 'number']:
-                            # Append values to the current row
-                            current_row.append(value)
-                        elif prefix == 'results.item.affectedRows':
-                            # Store the affectedRows value
-                            self._rowcount = value
-
+                    self.json_reader = ijson.parse(self.response.raw)
+                    self._process_schema()
+                    self._prepare_rows_reader()
                 else:
                     error_string = f"Cursor - API request failed with status "\
                                 f"code {self.response.status_code}:"\
@@ -107,8 +65,22 @@ class Cursor:
         except Exception as e:
             raise DatabaseError(f"Unexpected error occurred: {str(e)}") from e
 
-        finally:
-            self.close()
+    def _process_schema(self):
+        self.schema = []
+        for prefix, event, value in self.json_reader:
+            if prefix == 'results.item.schema.item' and event == 'start_map':
+                current_schema_item = {}
+            elif prefix == 'results.item.schema.item' and event == 'end_map':
+                self.schema.append(current_schema_item)
+                if len(self.schema) == len(self.description):
+                    break
+            elif prefix.startswith('results.item.schema.item.'):
+                key = prefix.split('.')[-1]
+                current_schema_item[key] = value
+
+    def _prepare_rows_reader(self):
+        self.rows_generator = ijson.items(self.json_reader,
+                                          'results.item.rows.item')
 
     def execute(self, query: str, params: dict = None):
         self._rowcount = None
@@ -124,8 +96,8 @@ class Cursor:
     def executemany(self, query: str, schema: str, params: list = None):
         self._rowcount = None
         json_object = {"query": query,
-                    "defaultSchema": schema,
-                    "parameters": params}
+                       "defaultSchema": schema,
+                       "parameters": params}
         self._execute_request(f"{self.connection.base_url}/batch", json_object)
 
     def callproc(self, procedure: str, schema: str, params: dict = None):
@@ -134,15 +106,13 @@ class Cursor:
             raise ValueError("Params must be a dictionary")
 
         json_object = {"procedure": procedure,
-                    "defaultSchema": schema,
-                    "parameters": params}
-        self._execute_request(f"{self.connection.base_url}/query", json_object)
+                       "defaultSchema": schema,
+                       "parameters": params}
+        self._execute_request(f"{self.connection.base_url}/exec", json_object)
 
     def _convert_row(self, row):
-        # Extract 'dataTypeName' values from each dictionary in self.schema
         data_type_names = [schema_item['dataTypeName'] for
                            schema_item in self.schema]
-
         converted_row = [convert_to_python_type(value, data_type_name) for
                          data_type_name, value in zip(data_type_names, row)]
         return converted_row
@@ -161,14 +131,19 @@ class Cursor:
         self.connection = None
 
     def fetchone(self):
-        if not self.rows:
+        try:
+            current_row = next(self.rows_generator)
+            processed_row = self._convert_row(current_row)
+            return processed_row
+        except StopIteration:
             return None
-        return self._convert_row(self.rows.pop(0))
 
     def fetchall(self):
-        # This consumes the iterator and gathers the rest of the items
-        rows = list([self._convert_row(row) for row in self.rows])
-        return rows
+        processed_rows = []
+        for row in self.rows_generator:
+            processed_row = [self._convert_row([value])[0] for value in row]
+            processed_rows.append(processed_row)
+        return processed_rows
 
     def fetchmany(self, size: int = 1):
         if size is None:
@@ -176,10 +151,10 @@ class Cursor:
 
         rows = []
         for _ in range(size):
-            try:
-                rows.append(self._convert_row(self.rows.pop(0)))
-            except IndexError:
-                break  # Stop if there are no more items
+            row = self.fetchone()
+            if row is None:
+                break
+            rows.append(row)
         return rows
 
     @property
