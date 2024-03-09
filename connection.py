@@ -43,6 +43,25 @@ class Connection:
 
             self.auth = (username, password)
 
+    def commit(self):
+
+        """Commit any pending transaction to the database.
+
+        Since the underlying system does not support transactions,
+
+        this method is implemented as a no-op.
+
+        """
+
+        pass
+
+    def rollback(self):
+
+        """This method is a no-op as the underlying system does not
+        support transactions."""
+
+        pass
+
     def cursor(self):
         if not hasattr(self._local, 'cursor'):
             self._local.cursor = Cursor(self)
