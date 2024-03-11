@@ -171,7 +171,7 @@ class Cursor:
             processed_rows.append(processed_row)
         return processed_rows
 
-    def fetchmany(self, size: int = 1):
+    def fetchmany(self, size=None):
         self._check_connection()
         if size is None:
             size = self.arraysize

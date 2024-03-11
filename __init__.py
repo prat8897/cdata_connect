@@ -35,5 +35,5 @@ def connect(config_path: str = None, base_url: str = None,
 
 
 apilevel = "2.0"
-threadsafety = 1
+threadsafety = 3
 paramstyle = "pyformat"
