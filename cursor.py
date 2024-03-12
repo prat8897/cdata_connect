@@ -53,7 +53,7 @@ class Cursor:
                     self.json_reader = ijson.parse(self.response.raw)
                     self._process_schema()
                     self._prepare_rows_reader()
-                    self._process_rowcount()  # Add this line to process rowcount
+                    self._process_rowcount()
                 else:
                     error_string = f"Cursor - API request failed with status "\
                                 f"code {self.response.status_code}:"\
@@ -77,8 +77,6 @@ class Cursor:
                 current_schema_item = {}
             elif prefix == 'results.item.schema.item' and event == 'end_map':
                 self.schema.append(current_schema_item)
-                if len(self.schema) == len(self.description):
-                    break
             elif prefix.startswith('results.item.schema.item.'):
                 key = prefix.split('.')[-1]
                 current_schema_item[key] = value
