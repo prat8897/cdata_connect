@@ -37,10 +37,11 @@ class Cursor:
         return self._rowcount
 
     def _execute_request(self, url, json_object):
+        self._check_connection()
         try:
             with self._lock:
                 logger.info("Cursor - Sending API request to "
-                            f"{self.connection.base_url} with json:"
+                            f"{url} with json:"
                             f"{json_object}")
 
                 self.response = requests.post(
@@ -53,7 +54,6 @@ class Cursor:
                     self.json_reader = ijson.parse(self.response.raw)
                     self._process_schema()
                     self._prepare_rows_reader()
-                    self._process_rowcount()
                 else:
                     error_string = f"Cursor - API request failed with status "\
                                 f"code {self.response.status_code}:"\
@@ -72,24 +72,25 @@ class Cursor:
 
     def _process_schema(self):
         self.schema = []
+        row_count = 0
         for prefix, event, value in self.json_reader:
             if prefix == 'results.item.schema.item' and event == 'start_map':
                 current_schema_item = {}
             elif prefix == 'results.item.schema.item' and event == 'end_map':
                 self.schema.append(current_schema_item)
+                if len(self.schema) == len(self.description):
+                    break
             elif prefix.startswith('results.item.schema.item.'):
                 key = prefix.split('.')[-1]
                 current_schema_item[key] = value
+            elif prefix == 'results.item.rows.item':
+                row_count += 1
+
+        self._rowcount = row_count
 
     def _prepare_rows_reader(self):
         self.rows_generator = ijson.items(self.json_reader,
                                           'results.item.rows.item')
-
-    def _process_rowcount(self):
-        for prefix, event, value in self.json_reader:
-            if prefix == 'results.item.affectedRows' and event == 'number':
-                self._rowcount = value
-                break
 
     def execute(self, query: str, params: dict = None):
         self._check_connection()
