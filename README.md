@@ -73,30 +73,37 @@ The batch operation allows you to execute batch INSERTs, UPDATEs, and DELETEs ag
 To execute a batch operation,
 
 ```
-query = "SELECT * FROM users WHERE id = %(id)s AND name = %(name)s"
-schema = "Schema_Name"
 params = [
     {
-      "@p1": { "dataType": <int>, "value": <any> },
-      "@p2": { "dataType": <int>, "value": <any> },
-      ...
+       "@p1": {"dataType": 5, "value": "New York"},
+       "@p2": {"dataType": 8, "value": 107},
     },
-    ...
-  ]
-cursor.executemany(query, schema, params)
+    {
+
+       "@p1": {"dataType": 5, "value": 'London'},
+       "@p2": {"dataType": 8, "value": 108},
+    }
+]
+query = """INSERT INTO PostgreSQL1.public.city (city, country_id)
+VALUES (@p1, @p2)"""
+cursor.executemany(query=query, schema="PostgreSQL1.public", params=params)
 ```
 ## Execute Procedures
 The execute operation allows you to execute stored procedures for any of the data sources configured in your CData Connect account.
 
 ```
-procedure = "Stored_Procedure"
-schema = "Schema_Name"
 params = {
-    "@p1": { "dataType": <int>, "direction": <int>, "value": <any> },
-    "@p2": { "dataType": <int>, "direction": <int>, "value": <any> },
-    ...
-  }
-cursor.callproc(procedure, schema, params)
+    "@p_film_title": {
+        "dataType": 5,
+        "value": "Academy Dinosaur"
+    },
+    "@p_new_rate": {
+        "dataType": 8,
+        "value": 2
+    }
+}
+query = """select update_film_rental_rate(@p1, @p2)"""
+cursor.callproc(params=params, procedure="PostgreSQL1.public.update_film_rental_rate")
 ```
 
 

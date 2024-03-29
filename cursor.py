@@ -1,5 +1,6 @@
 import requests
 import ijson
+import json
 import threading
 from .log import logger
 from .util.types import convert_to_python_type
@@ -21,7 +22,9 @@ class Cursor:
         self._rowcount = None
 
     def _check_connection(self):
-        if not self.connection.is_open:
+        if self.connection is None:
+            raise Exception("Cursor is closed")
+        elif not self.connection.is_open:
             raise Exception("Operation on closed connection is not allowed")
 
     @property
@@ -72,7 +75,8 @@ class Cursor:
 
     def _process_schema(self):
         self.schema = []
-        row_count = 0
+        total_affected_rows = 0
+
         for prefix, event, value in self.json_reader:
             if prefix == 'results.item.schema.item' and event == 'start_map':
                 current_schema_item = {}
@@ -83,10 +87,10 @@ class Cursor:
             elif prefix.startswith('results.item.schema.item.'):
                 key = prefix.split('.')[-1]
                 current_schema_item[key] = value
-            elif prefix == 'results.item.rows.item':
-                row_count += 1
+            elif prefix == 'results.item.affectedRows':
+                total_affected_rows += value
 
-        self._rowcount = row_count
+        self._rowcount = total_affected_rows
 
     def _prepare_rows_reader(self):
         self.rows_generator = ijson.items(self.json_reader,
@@ -109,34 +113,73 @@ class Cursor:
             base_url = f"{self.connection.base_url}/query"
         self._execute_request(base_url, json_object)
 
-    def executemany(self, query: str, schema: str, params: list = None):
+    def executemany(self, query: str, schema: str = None, params: list = None):
         self._check_connection()
         self._rowcount = None
-        json_object = {"query": query,
-                       "defaultSchema": schema,
-                       "parameters": params}
+
+        json_object = {
+            "query": query,
+            "defaultSchema": schema
+        }
+
+        if params is not None:
+            if not isinstance(params, list):
+                raise ValueError("Params must be a list of dictionaries")
+
+            parameter_list = []
+            for param_dict in params:
+                parameter_item = {}
+                for key, value in param_dict.items():
+                    if "dataType" not in value or "value" not in value:
+                        raise ValueError(f"Parameter '{key}' must contain "
+                                         "both 'dataType' and 'value' keys")
+
+                    parameter_item[key] = {
+                        "dataType": value["dataType"],
+                        "value": value["value"]
+                    }
+                parameter_list.append(parameter_item)
+
+            json_object["parameters"] = parameter_list
+
         if self.connection.workspace:
             base_url = f"{self.connection.base_url}/batch?workspace="\
-                       f"{self.connection.workspace}"
+                    f"{self.connection.workspace}"
         else:
             base_url = f"{self.connection.base_url}/batch"
-        self._execute_request(f"{base_url}", json_object)
 
-    def callproc(self, procedure: str, schema: str, params: dict = None):
+        self._execute_request(base_url, json_object)
+
+    def callproc(self, procedure: str, params: dict):
         self._check_connection()
         self._rowcount = None
-        if params is not None and not isinstance(params, dict):
+
+        json_object = {
+            "procedure": procedure,
+            "parameters": {}
+        }
+
+        if not isinstance(params, dict):
             raise ValueError("Params must be a dictionary")
 
-        json_object = {"procedure": procedure,
-                       "defaultSchema": schema,
-                       "parameters": params}
+        for key, value in params.items():
+            if not isinstance(value, dict):
+                raise ValueError(f"Parameter '{key}' must be a dictionary")
+
+            if "dataType" not in value:
+                raise ValueError(f"Parameter '{key}' must contain the 'dataType' key")
+
+            json_object["parameters"][key] = {
+                "dataType": value["dataType"],
+                "value": value["value"]
+            }
+
         if self.connection.workspace:
-            base_url = f"{self.connection.base_url}/exec?workspace="\
-                       f"{self.connection.workspace}"
+            base_url = f"{self.connection.base_url}/exec?workspace={self.connection.workspace}"
         else:
             base_url = f"{self.connection.base_url}/exec"
-        self._execute_request(f"{base_url}", json_object)
+
+        self._execute_request(base_url, json_object)
 
     def _convert_row(self, row):
         data_type_names = [schema_item['dataTypeName'] for
