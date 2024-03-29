@@ -43,9 +43,9 @@ class Cursor:
         self._check_connection()
         try:
             with self._lock:
-                logger.info("Cursor - Sending API request to "
-                            f"{url} with json:"
-                            f"{json_object}")
+                logger.debug("Cursor - Sending API request to "
+                             f"{url} with json:"
+                             f"{json_object}")
 
                 self.response = requests.post(
                     url,
