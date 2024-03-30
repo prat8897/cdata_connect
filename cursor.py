@@ -118,9 +118,11 @@ class Cursor:
         self._rowcount = None
 
         json_object = {
-            "query": query,
-            "defaultSchema": schema
+            "query": query
         }
+
+        if schema is not None:
+            json_object["defaultSchema"] = schema
 
         if params is not None:
             if not isinstance(params, list):
@@ -130,9 +132,12 @@ class Cursor:
             for param_dict in params:
                 parameter_item = {}
                 for key, value in param_dict.items():
-                    if "dataType" not in value or "value" not in value:
-                        raise ValueError(f"Parameter '{key}' must contain "
-                                         "both 'dataType' and 'value' keys")
+                    if "dataType" not in value:
+                        raise ValueError(f"Parameter '{key}' must contain the "
+                                         "'dataType' key")
+                    if "value" not in value:
+                        raise ValueError(f"Parameter '{key}' must contain the "
+                                         "'value' key")
 
                     parameter_item[key] = {
                         "dataType": value["dataType"],
@@ -167,7 +172,8 @@ class Cursor:
                 raise ValueError(f"Parameter '{key}' must be a dictionary")
 
             if "dataType" not in value:
-                raise ValueError(f"Parameter '{key}' must contain the 'dataType' key")
+                raise ValueError(f"Parameter '{key}' must contain the "
+                                 "'dataType' key")
 
             json_object["parameters"][key] = {
                 "dataType": value["dataType"],
@@ -175,7 +181,8 @@ class Cursor:
             }
 
         if self.connection.workspace:
-            base_url = f"{self.connection.base_url}/exec?workspace={self.connection.workspace}"
+            base_url = f"{self.connection.base_url}/exec?workspace="\
+                       f"{self.connection.workspace}"
         else:
             base_url = f"{self.connection.base_url}/exec"
 
